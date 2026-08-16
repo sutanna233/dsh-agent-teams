@@ -52,6 +52,8 @@ export interface ToolsConfig {
   memberProvider: string
   /** Optional member model override. */
   memberModel?: string
+  /** Optional member LLM provider override (pairs with `memberModel`). */
+  memberLlmProvider?: string
   /** Member delegation depth cap. */
   memberMaxDepth?: number
   /** Team size cap (members). */
@@ -264,7 +266,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
       name: { type: 'string', required: true, description: 'Unique member name inside the team.' },
       role: { type: 'string', description: 'Role of the member (e.g. researcher, engineer, reviewer).' },
       provider: { type: 'string', description: 'Optional LLM provider route. Use only when the user explicitly requests a different provider; requires model.' },
-      model: { type: 'string', description: 'Optional model override. Omit for the captain\'s current model (or the configured memberModel default).' },
+      model: { type: 'string', description: 'Optional model override. Omit for the configured memberModel default, else the captain\'s current model.' },
     },
     output: {
       schema: {
@@ -307,6 +309,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
           provider: args.provider,
           model: args.model,
           defaultModel: config.memberModel,
+          defaultProvider: config.memberLlmProvider,
         }, exec.signal)
         const member: TeamMember = {
           id: '',

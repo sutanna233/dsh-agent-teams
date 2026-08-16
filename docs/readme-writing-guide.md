@@ -68,6 +68,8 @@ dsh plugin --profile web add /absolute/path/to/<plugin>
 |---|---|---|
 | `stateDir` | `.agent-teams` | 状态目录名（工作区下） |
 | `memberProvider` | `spawn` | 成员子代理 provider |
+| `memberModel` | 无 | 成员模型默认覆盖 |
+| `memberLlmProvider` | 无 | 成员 LLM provider 默认覆盖（与 memberModel 成对） |
 | `memberMaxDepth` | `1` | 成员再委派深度上限（`0` = 禁止） |
 ```
 

@@ -381,6 +381,23 @@ check(
   defaultedSelection.provider === 'captain-provider'
     && defaultedSelection.model === 'configured-member-model',
 )
+const crossProviderDefaultSelection = await resolveMemberLlmSelection(selectionContext, captain, {
+  defaultModel: 'configured-member-model',
+  defaultProvider: 'small-provider',
+})
+check(
+  'plugin memberLlmProvider + memberModel pair default routes members to a distinct LLM provider',
+  crossProviderDefaultSelection.provider === 'small-provider'
+    && crossProviderDefaultSelection.model === 'configured-member-model'
+    && resolvedCalls.at(-1)?.reasoningEffort === 'max',
+)
+let emptyDefaultProviderRejected = false
+try {
+  await resolveMemberLlmSelection(selectionContext, captain, { defaultProvider: '' })
+} catch {
+  emptyDefaultProviderRejected = true
+}
+check('empty configured memberLlmProvider is rejected', emptyDefaultProviderRejected)
 let providerWithoutModelRejected = false
 try {
   await resolveMemberLlmSelection(selectionContext, captain, { provider: 'other-provider' })
