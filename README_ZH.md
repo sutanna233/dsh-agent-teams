@@ -91,10 +91,13 @@ dsh web
     memberModel: deepseek-v4
     memberLlmProvider: deepseek
     memberMaxDepth: 1
+    memberConcurrency: 1
     maxMembers: 8
 ```
 
 这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。跨 LLM provider 由 `agent_teams_add_member` 的可选 `provider` + `model` 参数表达；`memberModel` 只是所有成员的模型默认覆盖。若要让全体成员默认跑一个独立的小模型，配置 `memberLlmProvider` + `memberModel` 即可（不改变队长自身的 provider/model）。
+
+`memberConcurrency`（默认 `1`）限制同时跑 turn 的成员数：超过上限的唤醒会排队，成员跑完自动放行下一个。当全体成员共享一个小模型、且该模型 API 扛不住并发时，保持 `1`（串行）可避免多个子 Agent 同时打爆后端。
 
 ## 使用边界
 

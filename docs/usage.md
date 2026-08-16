@@ -68,6 +68,7 @@
     memberModel: deepseek-v4      # 可选：成员模型覆盖
     memberLlmProvider: deepseek  # 可选：成员 LLM provider 覆盖（与 memberModel 成对，可让成员默认跑小模型）
     memberMaxDepth: 1             # 成员再委派深度上限（0 = 禁止）
+    memberConcurrency: 1          # 同时跑 turn 的成员数上限（1 = 串行；超出上限的唤醒排队，成员跑完自动放行下一个）
     maxMembers: 8                 # 团队人数上限
 ```
 

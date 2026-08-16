@@ -34,9 +34,9 @@ import {
   writeTeam,
 } from './state.ts'
 import {
-  deliverToMember,
   installMemberSelectionRuntime,
   interruptMember,
+  MemberDispatcher,
   memberActivity,
   resolveMemberLlmSelection,
   spawnMember,
@@ -56,6 +56,8 @@ export interface ToolsConfig {
   memberLlmProvider?: string
   /** Member delegation depth cap. */
   memberMaxDepth?: number
+  /** Max members running a turn at once (serial when 1). */
+  memberConcurrency: number
   /** Team size cap (members). */
   maxMembers: number
 }
@@ -195,6 +197,7 @@ export function steerCaptainReport(captain: Pick<Agent, 'steer'>, from: string, 
  */
 export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void {
   const memberSelections = installMemberSelectionRuntime(ctx, config.stateDir)
+  const dispatcher = new MemberDispatcher(ctx, config.memberConcurrency)
 
   ctx.tools.register(defineTool({
     name: 'agent_teams_create',
@@ -382,7 +385,10 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
       return withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
         const member = requireMember(fresh, args.name)
-        if (member.id !== '') interruptMember(ctx, captain, member.id)
+        if (member.id !== '') {
+          interruptMember(ctx, captain, member.id)
+          dispatcher.forgetMember(stateRoot, fresh.id, member.id)
+        }
         member.status = 'removed'
         await writeTeam(stateRoot, fresh)
         appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/member-removed', {
@@ -624,7 +630,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
           message_id: { type: 'string', required: true },
           from: { type: 'string', required: true },
           to: { type: 'string', required: true },
-          delivered: { type: 'string', required: true, description: 'live (accepted by the live captain), wake (member recipient woken), or mailbox (durable inbox only).' },
+          delivered: { type: 'string', required: true, description: 'live (accepted by the live captain), wake (member woken now), queued (member parked until a concurrency slot frees), or mailbox (durable inbox only).' },
         },
       },
       render: (args, value) => [{
@@ -683,14 +689,21 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
         }
         return { message_id: prepared.message.id, from: prepared.from, to: CAPTAIN_KEY, delivered }
       }
-      let delivered: 'wake' | 'mailbox' = 'mailbox'
+      let delivered: 'wake' | 'queued' | 'mailbox' = 'mailbox'
       if (captain !== undefined && prepared.recipient.id !== '') {
         const senderText = prepared.from === CAPTAIN_KEY
           ? args.content
           : `Message from team member ${prepared.from}:\n\n${args.content}`
         const text = `AgentTeams state policy: inspect ${config.stateDir}/${prepared.fresh.id}/ read-only; never edit team.json or inbox files directly. Use agent_teams_* tools for team state.\n\n${senderText}`
-        const accepted = await deliverToMember(ctx, captain, prepared.recipient.id, text, exec.signal)
-        delivered = accepted ? 'wake' : 'mailbox'
+        const outcome = await dispatcher.dispatch(
+          stateRoot,
+          prepared.fresh.id,
+          captain,
+          prepared.recipient.id,
+          text,
+          exec.signal,
+        )
+        delivered = outcome === 'wake' ? 'wake' : outcome === 'queued' ? 'queued' : 'mailbox'
       }
       return {
         message_id: prepared.message.id,
@@ -719,17 +732,35 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
         () => requireFreshParticipant(stateRoot, located.id, caller.id),
       )
       const activity = await memberActivity(ctx, team.captainSessionId)
+      // Drain the wake queue before snapshotting so finished members free
+      // their slots and queued members start as soon as possible.
+      const captainAgent = ctx.agents.get(team.captainSessionId as SessionId)
+      if (captainAgent !== undefined) {
+        await dispatcher.drain(stateRoot, team.id, captainAgent, activity)
+      }
       const members = team.members
         .filter((member) => member.status !== 'removed')
-        .map((member) => ({
-          name: member.name,
-          role: member.role ?? '',
-          provider: member.provider ?? '',
-          model: member.model ?? '',
-          reasoning_effort: member.reasoningEffort ?? '',
-          status: member.status,
-          activity: member.id !== '' ? (activity.get(member.id) ?? 'unknown') : 'unspawned',
-        }))
+        .map((member) => {
+          let activityState: string
+          if (member.id === '') {
+            activityState = 'unspawned'
+          } else if (dispatcher.isActive(stateRoot, team.id, member.id)) {
+            activityState = 'running'
+          } else if (dispatcher.isQueued(stateRoot, team.id, member.id)) {
+            activityState = 'queued'
+          } else {
+            activityState = activity.get(member.id) ?? 'unknown'
+          }
+          return {
+            name: member.name,
+            role: member.role ?? '',
+            provider: member.provider ?? '',
+            model: member.model ?? '',
+            reasoning_effort: member.reasoningEffort ?? '',
+            status: member.status,
+            activity: activityState,
+          }
+        })
       const tasks = team.tasks.map((task) => ({
         id: task.id,
         subject: task.subject,
@@ -820,6 +851,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
         // Archive, not delete: tasks (with their dependency graph) and the
         // mailboxes stay on disk for later review and dependency rebuilds.
         await archiveTeamDir(stateRoot, fresh.id)
+        dispatcher.forget(stateRoot, fresh.id)
       })
       return { deleted: true, team_name: team.name }
     },

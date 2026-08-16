@@ -91,10 +91,13 @@ Defaults work without extra setup. A trusted profile can override member behavio
     memberModel: deepseek-v4
     memberLlmProvider: deepseek
     memberMaxDepth: 1
+    memberConcurrency: 1
     maxMembers: 8
 ```
 
 `memberProvider` is the sub-agent runtime backend (`spawn` / `fork`), not an LLM provider. Cross-LLM-provider routing uses the optional `provider` + `model` fields of `agent_teams_add_member`; `memberModel` is only a model default for all members. To give all members a default distinct LLM provider (e.g. a small model on another provider), set `memberLlmProvider` together with `memberModel` — the pair overrides the members' LLM route without changing the captain's own provider/model.
+
+`memberConcurrency` (default `1`) caps how many members run a turn at once: wakes beyond the cap are queued and auto-start as running members go idle. Keep it at `1` (serial) when all members share one small model whose API cannot absorb concurrent requests.
 
 ## Boundaries
 

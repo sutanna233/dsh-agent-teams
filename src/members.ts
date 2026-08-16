@@ -407,3 +407,144 @@ export async function memberActivity(
   }
   return activity
 }
+
+/** One parked member wake. The message text is already durable in the mailbox. */
+interface MemberWake {
+  childId: string
+  text: string
+}
+
+/**
+ * Serializes member turn wake-ups so a shared, low-capacity member model is
+ * not hit by every member running at once. Beyond `limit`, wakes are parked in
+ * a FIFO queue and drained as running members go idle — reconciled from
+ * {@link memberActivity}, the captain's polling point in `agent_teams_status`.
+ *
+ * The mailbox remains the durable source of truth; this only defers the live
+ * `followup` delivery, and is process-local like the member selection bridge.
+ */
+export class MemberDispatcher {
+  private readonly active = new Map<string, Set<string>>()
+  private readonly queue = new Map<string, MemberWake[]>()
+
+  constructor(
+    private readonly ctx: Context,
+    private readonly limit: number,
+  ) {}
+
+  private static key(stateRoot: string, teamId: string): string {
+    return `${stateRoot}\u0000${teamId}`
+  }
+
+  /** Whether a member is currently counted as running its turn. */
+  isActive(stateRoot: string, teamId: string, childId: string): boolean {
+    return this.active.get(MemberDispatcher.key(stateRoot, teamId))?.has(childId) ?? false
+  }
+
+  /** Whether a member has a wake parked in the team's queue. */
+  isQueued(stateRoot: string, teamId: string, childId: string): boolean {
+    const wakes = this.queue.get(MemberDispatcher.key(stateRoot, teamId))
+    return wakes?.some((wake) => wake.childId === childId) ?? false
+  }
+
+  runningCount(stateRoot: string, teamId: string): number {
+    return this.active.get(MemberDispatcher.key(stateRoot, teamId))?.size ?? 0
+  }
+
+  /** Drop finished children from the active set (no waking). */
+  private reconcile(stateRoot: string, teamId: string, activity: Map<string, 'running' | 'inactive'>): void {
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    const activeSet = this.active.get(key)
+    if (activeSet === undefined) return
+    for (const childId of [...activeSet]) {
+      if (activity.get(childId) !== 'running') activeSet.delete(childId)
+    }
+    if (activeSet.size === 0) this.active.delete(key)
+  }
+
+  private markActive(stateRoot: string, teamId: string, childId: string): void {
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    const activeSet = this.active.get(key) ?? new Set<string>()
+    activeSet.add(childId)
+    this.active.set(key, activeSet)
+  }
+
+  /**
+   * Wake a member now when a slot is free, otherwise park the wake in the
+   * FIFO queue. Best-effort: an unavailable activity snapshot only degrades to
+   * the in-memory gate; a failed followup falls back to the durable mailbox.
+   */
+  async dispatch(
+    stateRoot: string,
+    teamId: string,
+    captain: Agent,
+    childId: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<'wake' | 'queued'> {
+    try {
+      const activity = await memberActivity(this.ctx, captain.id)
+      await this.drain(stateRoot, teamId, captain, activity)
+    } catch {
+      // Activity snapshot is best-effort; fall through to the in-memory gate.
+    }
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    const queued = this.queue.get(key)
+    if ((queued !== undefined && queued.length > 0) || this.runningCount(stateRoot, teamId) >= this.limit) {
+      const wakes = this.queue.get(key) ?? []
+      wakes.push({ childId, text })
+      this.queue.set(key, wakes)
+      return 'queued'
+    }
+    const accepted = await deliverToMember(this.ctx, captain, childId, text, signal ?? new AbortController().signal)
+    if (!accepted) return 'queued'
+    this.markActive(stateRoot, teamId, childId)
+    return 'wake'
+  }
+
+  /**
+   * Reconcile the running set against a fresh activity snapshot and wake
+   * queued members while slots are free. Idempotent; called from
+   * `agent_teams_status` and from {@link dispatch} before admission.
+   */
+  async drain(
+    stateRoot: string,
+    teamId: string,
+    captain: Agent,
+    activity: Map<string, 'running' | 'inactive'>,
+  ): Promise<void> {
+    this.reconcile(stateRoot, teamId, activity)
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    const wakes = this.queue.get(key)
+    if (wakes === undefined || wakes.length === 0) return
+    while (this.runningCount(stateRoot, teamId) < this.limit && wakes.length > 0) {
+      const wake = wakes.shift()!
+      const accepted = await deliverToMember(this.ctx, captain, wake.childId, wake.text, new AbortController().signal)
+      if (accepted) this.markActive(stateRoot, teamId, wake.childId)
+    }
+    if (wakes.length === 0) this.queue.delete(key)
+  }
+
+  /** Drop all bookkeeping for a team (delete/archive). */
+  forget(stateRoot: string, teamId: string): void {
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    this.active.delete(key)
+    this.queue.delete(key)
+  }
+
+  /** Drop one member's parked wake and active mark (member removal). */
+  forgetMember(stateRoot: string, teamId: string, childId: string): void {
+    const key = MemberDispatcher.key(stateRoot, teamId)
+    const activeSet = this.active.get(key)
+    if (activeSet !== undefined) {
+      activeSet.delete(childId)
+      if (activeSet.size === 0) this.active.delete(key)
+    }
+    const wakes = this.queue.get(key)
+    if (wakes !== undefined) {
+      const remaining = wakes.filter((wake) => wake.childId !== childId)
+      if (remaining.length === 0) this.queue.delete(key)
+      else this.queue.set(key, remaining)
+    }
+  }
+}

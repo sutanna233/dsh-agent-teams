@@ -23,3 +23,6 @@
         # 覆盖 captain 当前 provider/model。sunjun3773 网关 / Qwen3.6-35B-A3B.gguf。
         memberLlmProvider: sunjun3773
         memberModel: Qwen3.6-35B-A3B.gguf
+        # 同时运行的成员数上限（默认 1，串行）。小模型 API 扛不住并发时保持 1：
+        # 超过上限的唤醒会排队，成员跑完自动放行下一个。后端变强可调高。
+        memberConcurrency: 1

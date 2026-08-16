@@ -69,6 +69,8 @@ export interface Config {
   memberLlmProvider?: string
   /** Member delegation depth cap (default `1`; `0` forbids delegation entirely). */
   memberMaxDepth?: number
+  /** Max members allowed to run a turn at once (default `1`, serial). Extra wakes are queued and auto-start as slots free. */
+  memberConcurrency?: number
   /** Team size cap in members (default `8`). */
   maxMembers?: number
   /** Prompt-section order for the usage policy (default `117`, after delegation policy). */
@@ -81,6 +83,7 @@ export const Config: z<Config> = z.object({
   memberModel: z.string(),
   memberLlmProvider: z.string(),
   memberMaxDepth: z.natural().default(1),
+  memberConcurrency: z.natural().min(1).default(1),
   maxMembers: z.natural().min(1).default(8),
   promptSectionOrder: z.natural().default(117),
 })
@@ -91,8 +94,8 @@ function usageSectionText(toolNames: string): string {
 1. Call agent_teams_create with a team name and the goal as description. You become the captain and may lead one team at a time.
 2. Call agent_teams_add_member once per role the goal needs (researcher, engineer, reviewer, ...). Members are durable subagents: they wait for your messages, then work a full turn. By default each member snapshots your current provider, model, and reasoning effort. Never ask the user to choose these per member; only pass provider/model when the user explicitly requests a different route for that role.
 3. Break the goal into tasks with agent_teams_create_task; wire dependencies between tasks (a task is claimable only when its dependencies are completed). Assign each task to a member when it fits a role.
-4. Dispatch work: claim each assigned task (agent_teams_claim_task with assignee) and wake the member with agent_teams_send_message naming its task id and instructions. One task per message keeps turns focused.
-5. Poll agent_teams_status until members are idle; relay member-to-member messages (agent_teams_send_message with from=<sender>) and collect completed tasks' outputs. If a member reports a blocker, reassign the task or adjust the plan.
+4. Dispatch work: claim each assigned task (agent_teams_claim_task with assignee) and wake the member with agent_teams_send_message naming its task id and instructions. One task per message keeps turns focused. Members run only a limited number at a time; when that limit is reached, further sends are queued and start automatically as running members go idle.
+5. Poll agent_teams_status until members are idle; relay member-to-member messages (agent_teams_send_message with from=<sender>) and collect completed tasks' outputs. A member showing activity "queued" is normal — it starts once a slot frees. If a member reports a blocker, reassign the task or adjust the plan.
 6. Present the team's results to the user, then agent_teams_delete the team unless the user wants to keep working with it.
 
 Tools: ${toolNames}`
@@ -105,6 +108,7 @@ export function apply(ctx: Context, config: Config): void {
     memberModel: config.memberModel,
     memberLlmProvider: config.memberLlmProvider,
     memberMaxDepth: config.memberMaxDepth ?? 1,
+    memberConcurrency: config.memberConcurrency ?? 1,
     maxMembers: config.maxMembers ?? 8,
   }
 
