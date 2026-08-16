@@ -19,10 +19,10 @@
         stateDir: .agent-teams
         # Provider used to spawn member subagents ('spawn' or 'fork').
         memberProvider: spawn
-        # 主从协作默认：团队成员固定跑一个小模型（独立 LLM provider），
-        # 覆盖 captain 当前 provider/model。sunjun3773 网关 / Qwen3.6-35B-A3B.gguf。
-        memberLlmProvider: sunjun3773
-        memberModel: Qwen3.6-35B-A3B.gguf
-        # 同时运行的成员数上限（默认 1，串行）。小模型 API 扛不住并发时保持 1：
+        # 成员模型不在此处锁死，全权由主 agent（captain）运行时决定：
+        # 默认继承 captain 当前 provider/model；captain 按任务难度用
+        # agent_teams_add_member 的 provider/model 参数给单个成员选模型
+        # （机械/简单任务用轻量模型，复杂/强推理任务用强模型）。
+        # 同时运行的成员数上限（默认 1，串行）。成员共享小模型且后端扛不住并发时保持 1：
         # 超过上限的唤醒会排队，成员跑完自动放行下一个。后端变强可调高。
         memberConcurrency: 1

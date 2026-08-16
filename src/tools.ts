@@ -264,12 +264,12 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
 
   ctx.tools.register(defineTool({
     name: 'agent_teams_add_member',
-    description: 'Add a durable continuable member. By default it snapshots the captain\'s current LLM provider, model, and reasoning effort with no user prompt. Supply provider/model only for an explicitly requested role-specific route. The member waits for messages, works on assigned tasks, and can message the team.',
+    description: 'Add a durable continuable member. By default it inherits the captain\'s current LLM provider, model, and reasoning effort with no user prompt. You may set provider/model to route this member to a model you choose (e.g. by task difficulty). The member waits for messages, works on assigned tasks, and can message the team.',
     parameters: {
       name: { type: 'string', required: true, description: 'Unique member name inside the team.' },
       role: { type: 'string', description: 'Role of the member (e.g. researcher, engineer, reviewer).' },
-      provider: { type: 'string', description: 'Optional LLM provider route. Use only when the user explicitly requests a different provider; requires model.' },
-      model: { type: 'string', description: 'Optional model override. Omit for the configured memberModel default, else the captain\'s current model.' },
+      provider: { type: 'string', description: 'Optional LLM provider route for this member, chosen by you (e.g. by task difficulty); requires model.' },
+      model: { type: 'string', description: 'Optional model id for this member, chosen by you. Omit to inherit your current model; set together with provider to route this member elsewhere.' },
     },
     output: {
       schema: {

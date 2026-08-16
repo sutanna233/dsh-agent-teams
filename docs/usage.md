@@ -65,18 +65,18 @@
   config:
     stateDir: .agent-teams        # 团队状态目录名（工作区下）
     memberProvider: spawn         # 子代理运行后端（spawn / fork），不是 LLM provider
-    memberModel: deepseek-v4      # 可选：成员模型覆盖
-    memberLlmProvider: deepseek  # 可选：成员 LLM provider 覆盖（与 memberModel 成对，可让成员默认跑小模型）
+    # memberModel: deepseek-v4    # 可选：给全体成员固定默认模型（通常不设，交给主 agent 按难度选）
+    # memberLlmProvider: deepseek # 可选：与 memberModel 成对
     memberMaxDepth: 1             # 成员再委派深度上限（0 = 禁止）
     memberConcurrency: 1          # 同时跑 turn 的成员数上限（1 = 串行；超出上限的唤醒排队，成员跑完自动放行下一个）
     maxMembers: 8                 # 团队人数上限
 ```
 
-最终优先级为：成员显式 `provider` + `model` / `model` → `memberModel`（模型侧）与 `memberLlmProvider`（provider 侧）→ 队长当前路由。思考强度默认继承队长当前值，并在目标 provider/model 上创建前校验；不兼容时成员创建会明确失败。最终生效的 provider/model/思考强度会写入 `team.json`，供状态查询和成员冷恢复使用。
+成员模型**默认继承队长（主 agent）当前 provider/model**，插件与提示词不预设任何具体模型名；主 agent 按任务难度用 `agent_teams_add_member` 的 `provider` + `model` 给单个成员自主选模型（机械/简单任务用轻量模型，复杂/强推理任务用强模型）。最终优先级：成员显式 `provider` + `model` → 可选的 `memberModel`（模型侧）与 `memberLlmProvider`（provider 侧）→ 队长当前路由。思考强度默认继承队长当前值，并在目标 provider/model 上创建前校验；不兼容时成员创建会明确失败。最终生效的 provider/model/思考强度会写入 `team.json`，供状态查询和成员冷恢复使用。
 
 ## 使用协议
 
-插件提示段会指导模型按协议执行：建团队 → 按角色拉成员 → 拆任务并声明依赖 → 领取并唤醒成员 → 轮询 `agent_teams_status` 收集产出 → 汇报后 `agent_teams_delete`。成员之间可以直接互发消息（`agent_teams_send_message` 直达对方邮箱并唤醒对方），无需队长中转。
+插件提示段会指导模型按协议执行：建团队 → 按角色拉成员（成员模型由主 agent 按任务难度自主决定，默认继承主模型）→ 拆任务并声明依赖 → 领取并唤醒成员 → 轮询 `agent_teams_status` 收集产出 → 汇报后 `agent_teams_delete`。成员之间可以直接互发消息（`agent_teams_send_message` 直达对方邮箱并唤醒对方），无需队长中转。
 
 ## 已知限制
 

@@ -88,14 +88,15 @@ Defaults work without extra setup. A trusted profile can override member behavio
   config:
     stateDir: .agent-teams
     memberProvider: spawn
-    memberModel: deepseek-v4
-    memberLlmProvider: deepseek
+    # Optional: a fixed default model for all members (usually omitted so the captain picks per difficulty)
+    # memberModel: deepseek-v4
+    # memberLlmProvider: deepseek
     memberMaxDepth: 1
     memberConcurrency: 1
     maxMembers: 8
 ```
 
-`memberProvider` is the sub-agent runtime backend (`spawn` / `fork`), not an LLM provider. Cross-LLM-provider routing uses the optional `provider` + `model` fields of `agent_teams_add_member`; `memberModel` is only a model default for all members. To give all members a default distinct LLM provider (e.g. a small model on another provider), set `memberLlmProvider` together with `memberModel` — the pair overrides the members' LLM route without changing the captain's own provider/model.
+`memberProvider` is the sub-agent runtime backend (`spawn` / `fork`), not an LLM provider. Member models **inherit the captain's (main agent's) current provider/model by default**, and the plugin never prescribes concrete model names in code or prompts; the captain chooses each member's model per task difficulty via `agent_teams_add_member`'s `provider` + `model` fields (a lighter model for mechanical chores, a stronger one for hard reasoning). Set the optional `memberLlmProvider` + `memberModel` pair only when you genuinely want one fixed default model for every member.
 
 `memberConcurrency` (default `1`) caps how many members run a turn at once: wakes beyond the cap are queued and auto-start as running members go idle. Keep it at `1` (serial) when all members share one small model whose API cannot absorb concurrent requests.
 

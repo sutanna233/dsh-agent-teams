@@ -88,14 +88,15 @@ dsh web
   config:
     stateDir: .agent-teams
     memberProvider: spawn
-    memberModel: deepseek-v4
-    memberLlmProvider: deepseek
+    # 可选：给全体成员一个固定默认模型（通常不设，交给主 agent 按难度选）
+    # memberModel: deepseek-v4
+    # memberLlmProvider: deepseek
     memberMaxDepth: 1
     memberConcurrency: 1
     maxMembers: 8
 ```
 
-这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。跨 LLM provider 由 `agent_teams_add_member` 的可选 `provider` + `model` 参数表达；`memberModel` 只是所有成员的模型默认覆盖。若要让全体成员默认跑一个独立的小模型，配置 `memberLlmProvider` + `memberModel` 即可（不改变队长自身的 provider/model）。
+这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。成员模型**默认继承队长（主 agent）当前的 provider/model**，插件与提示词不预设任何具体模型名；主 agent 会按任务难度用 `agent_teams_add_member` 的 `provider` + `model` 参数给单个成员自主选模型（机械/简单任务用轻量模型，复杂/强推理任务用强模型）。只有当你确实想给全体成员一个固定默认（如某个独立小模型）时，才配置可选的 `memberLlmProvider` + `memberModel`。
 
 `memberConcurrency`（默认 `1`）限制同时跑 turn 的成员数：超过上限的唤醒会排队，成员跑完自动放行下一个。当全体成员共享一个小模型、且该模型 API 扛不住并发时，保持 `1`（串行）可避免多个子 Agent 同时打爆后端。
 
