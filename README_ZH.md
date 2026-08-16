@@ -89,11 +89,12 @@ dsh web
     stateDir: .agent-teams
     memberProvider: spawn
     memberModel: deepseek-v4
+    memberLlmProvider: deepseek
     memberMaxDepth: 1
     maxMembers: 8
 ```
 
-这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。跨 LLM provider 由 `agent_teams_add_member` 的可选 `provider` + `model` 参数表达；`memberModel` 只是所有成员的模型默认覆盖。
+这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。跨 LLM provider 由 `agent_teams_add_member` 的可选 `provider` + `model` 参数表达；`memberModel` 只是所有成员的模型默认覆盖。若要让全体成员默认跑一个独立的小模型，配置 `memberLlmProvider` + `memberModel` 即可（不改变队长自身的 provider/model）。
 
 ## 使用边界
 

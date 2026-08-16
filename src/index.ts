@@ -65,6 +65,8 @@ export interface Config {
   memberProvider?: string
   /** Optional model override applied to every member. */
   memberModel?: string
+  /** Optional LLM provider override applied to every member (pairs with `memberModel`). */
+  memberLlmProvider?: string
   /** Member delegation depth cap (default `1`; `0` forbids delegation entirely). */
   memberMaxDepth?: number
   /** Team size cap in members (default `8`). */
@@ -77,6 +79,7 @@ export const Config: z<Config> = z.object({
   stateDir: z.string().default('.agent-teams'),
   memberProvider: z.string().default('spawn'),
   memberModel: z.string(),
+  memberLlmProvider: z.string(),
   memberMaxDepth: z.natural().default(1),
   maxMembers: z.natural().min(1).default(8),
   promptSectionOrder: z.natural().default(117),
@@ -100,6 +103,7 @@ export function apply(ctx: Context, config: Config): void {
     stateDir: config.stateDir ?? '.agent-teams',
     memberProvider: config.memberProvider ?? 'spawn',
     memberModel: config.memberModel,
+    memberLlmProvider: config.memberLlmProvider,
     memberMaxDepth: config.memberMaxDepth ?? 1,
     maxMembers: config.maxMembers ?? 8,
   }

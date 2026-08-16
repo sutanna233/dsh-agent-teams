@@ -67,6 +67,8 @@ export interface MemberLlmSelectionRequest {
   model?: string
   /** Plugin-level member model default. */
   defaultModel?: string
+  /** Plugin-level member LLM provider default (pairs with `defaultModel`). */
+  defaultProvider?: string
 }
 
 /** Process-local bridge between spawn admission and synchronous child setup. */
@@ -112,9 +114,11 @@ function modelSelection(selection: MemberLlmSelection): ModelSelection {
 /**
  * Resolve one member's complete model selection. Ordinary members snapshot the
  * captain's current request route and reasoning effort. An explicit member
- * provider/model or plugin-level model replaces only that route; the current
- * captain effort remains the inherited policy and is validated against the
- * target model before a child is created.
+ * provider/model replaces that route; a plugin-level member model/provider
+ * (`memberModel` / `memberLlmProvider`) overrides only that side while the
+ * current captain route remains the inherited default. The current captain
+ * effort remains the inherited policy and is validated against the target
+ * model before a child is created.
  */
 export async function resolveMemberLlmSelection(
   ctx: Context,
@@ -125,6 +129,7 @@ export async function resolveMemberLlmSelection(
   const explicitProvider = request.provider?.trim()
   const explicitModel = request.model?.trim()
   const defaultModel = request.defaultModel?.trim()
+  const defaultProvider = request.defaultProvider?.trim()
   if (request.provider !== undefined && explicitProvider === '') {
     throw new Error('member LLM provider must not be empty')
   }
@@ -134,12 +139,15 @@ export async function resolveMemberLlmSelection(
   if (request.defaultModel !== undefined && defaultModel === '') {
     throw new Error('configured memberModel must not be empty')
   }
+  if (request.defaultProvider !== undefined && defaultProvider === '') {
+    throw new Error('configured memberLlmProvider must not be empty')
+  }
   if (explicitProvider !== undefined && explicitModel === undefined) {
     throw new Error('an explicit member LLM provider requires an explicit member model')
   }
 
   const current = captain.session.requestHeader()?.config
-  const provider = explicitProvider ?? current?.provider ?? captain.options.provider
+  const provider = explicitProvider ?? defaultProvider ?? current?.provider ?? captain.options.provider
   const model = explicitModel ?? defaultModel ?? current?.model ?? captain.options.model
   if (provider === undefined || model === undefined) {
     throw new Error('cannot resolve the member LLM route from the current captain session')
