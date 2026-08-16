@@ -19,3 +19,7 @@
         stateDir: .agent-teams
         # Provider used to spawn member subagents ('spawn' or 'fork').
         memberProvider: spawn
+        # 主从协作默认：团队成员固定跑一个小模型（独立 LLM provider），
+        # 覆盖 captain 当前 provider/model。sunjun3773 网关 / Qwen3.6-35B-A3B.gguf。
+        memberLlmProvider: sunjun3773
+        memberModel: Qwen3.6-35B-A3B.gguf
