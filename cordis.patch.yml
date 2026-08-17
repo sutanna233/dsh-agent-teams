@@ -23,6 +23,6 @@
         # 默认继承 captain 当前 provider/model；captain 按任务难度用
         # agent_teams_add_member 的 provider/model 参数给单个成员选模型
         # （机械/简单任务用轻量模型，复杂/强推理任务用强模型）。
-        # 同时运行的成员数上限（默认 1，串行）。成员共享小模型且后端扛不住并发时保持 1：
-        # 超过上限的唤醒会排队，成员跑完自动放行下一个。后端变强可调高。
-        memberConcurrency: 1
+        # 同时运行的成员数上限（默认 3）。超过上限的唤醒会排队，
+        # 成员跑完自动放行下一个。35B 本地推理扛 3 路并发，如后端变强可调高。
+        memberConcurrency: 3
